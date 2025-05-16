@@ -1,0 +1,24 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-05-11"
+---
+
+
+```{r setup, include=FALSE}
+# Pakiety 
+install.packages(c("spdep", "readxl", "dplyr", "sf", "rnaturalearth", "rnaturalearthdata"))
+library(spdep)
+library(readxl)
+library(dplyr)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+```
+
+```{r setup, include=FALSE}
+
+
+
+```
