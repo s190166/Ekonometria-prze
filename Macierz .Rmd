@@ -18,7 +18,8 @@ library(rnaturalearthdata)
 ```
 
 ```{r setup, include=FALSE}
-
+# Wczytywanie danych 
+data <- dane_panelowe
 
 
 ```
