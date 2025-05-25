@@ -7,19 +7,100 @@ date: "2025-05-11"
 
 ```{r setup, include=FALSE}
 # Pakiety 
-install.packages(c("spdep", "readxl", "dplyr", "sf", "rnaturalearth", "rnaturalearthdata"))
-library(spdep)
+install.packages(c("tidyr", "readxl", "dplyr", "ggplot", "sf", "spdep"))
 library(readxl)
 library(dplyr)
+library(ggplot2)
+library(tidyr)
 library(sf)
-library(rnaturalearth)
-library(rnaturalearthdata)
-
+library(spdep)
 ```
 
 ```{r setup, include=FALSE}
 # Wczytywanie danych 
-data <- dane_panelowe
-
-
+dane <- dane_panelowe_kopia
+mapa <- st_read("EU27.shp")
 ```
+
+
+```{r setup, include=FALSE}
+# Dodawanie zmiennej Y w celu ułatwienia pisania 
+dane_2024 <- dane %>% filter(rok == 2024)
+# Wykres 1:  ~ Czas w unii europejskiej
+q1 <- ggplot(dane_2024, aes(x = `Czas w unii europejskiej`, y = PPP)) +
+  geom_point(color = "steelblue", size = 3) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  theme_minimal() +
+  labs(
+    title = "Zależność PPP od Czasu w UE",
+    x = "Czas w unii europejskiej",
+    y = "PPP"
+  )
+
+# Wykres 2: Y ~ Ślad zużycia
+q2 <- ggplot(dane_2024, aes(x = `Ślad zużycia`, y = Y)) +
+  geom_point(color = "steelblue", size = 3) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  theme_minimal() +
+  labs(
+    title = "Zależność PPP od Śladu zużycia",
+    x = "Ślad zużycia",
+    y = "P"
+  )
+
+# Wykres 3: Y ~ Electricity prices
+q3 <- ggplot(dane_2024, aes(x = `Electricity prices`, y = Y)) +
+  geom_point(color = "steelblue", size = 3) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  theme_minimal() +
+  labs(
+    title = "Zależność PPP od Ceny energii elektrycznej",
+    x = "Electricity prices",
+    y = "PPP"
+  )
+# Wykres 4: Y ~ Jednostkowy koszt pracy
+q4 <- ggplot(dane_2024, aes(x = `Jednostkowy koszt pracy`, y = Y)) +
+  geom_point(color = "steelblue", size = 3) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  theme_minimal() +
+  labs(
+    title = "Zależność PPP od Jednostkowego kosztu pracy",
+    x = "Jednostkowy koszt pracy",
+    y = "PPP"
+  )
+
+``` 
+
+```{r setup, include=FALSE}
+# Wybór interesujących zmiennych
+zmienne_do_korelacji <- dane_2024 %>%
+  select(`PPP`,
+         `Czas w unii europejskiej`,
+         `Ślad zużycia`,
+         `Electricity prices`,
+         `Jednostkowy koszt pracy`)
+
+# Obliczenie macierzy korelacji
+macierz_korelacji <- cor(zmienne_do_korelacji, use = "complete.obs")
+
+# Wyświetlenie wyniku
+print(round(macierz_korelacji, 2))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
