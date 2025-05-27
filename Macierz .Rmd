@@ -7,19 +7,23 @@ date: "2025-05-11"
 
 ```{r setup, include=FALSE}
 # Pakiety 
-install.packages(c("tidyr", "readxl", "dplyr", "ggplot", "sf", "spdep"))
+install.packages(c("tidyr", "readxl", "dplyr", "ggplot", "sf", "spdep", "sf", "spdep", "tmap", "tidyverse", "dplyr", "spatialreg"))
 library(readxl)
 library(dplyr)
 library(ggplot2)
 library(tidyr)
 library(sf)
 library(spdep)
+library(tmap)
+library(tidyverse)
+library(dplyr)
+library(spatialreg)
 ```
 
 ```{r setup, include=FALSE}
 # Wczytywanie danych 
 dane <- dane_panelowe_kopia
-mapa <- st_read("EU27.shp")
+eu27 <- st_read("danemapy/EU27Official.shp")
 ```
 
 
@@ -72,7 +76,7 @@ q4 <- ggplot(dane_2024, aes(x = `Jednostkowy koszt pracy`, y = Y)) +
 ``` 
 
 ```{r setup, include=FALSE}
-# Wybór interesujących zmiennych
+# Wybór 
 zmienne_do_korelacji <- dane_2024 %>%
   select(`PPP`,
          `Czas w unii europejskiej`,
@@ -87,15 +91,61 @@ macierz_korelacji <- cor(zmienne_do_korelacji, use = "complete.obs")
 print(round(macierz_korelacji, 2))
 ```
 
+```{r setup, include=FALSE}
+# upewnij się, że oba są typu character
+eu27$CNTR_ID <- as.character(eu27$CNTR_ID)
+dane_panelowe$ID <- as.character(dane_panelowe$skr)
 
+# teraz dopiero łączymy
+eu27_merged <- left_join(eu27, dane_panelowe, by = c("CNTR_ID" = "skr"))
 
+# Tworzymy relacje sąsiedztwa
+neigh <- poly2nb(eu27_merged)
 
+# Lista wag z normalizacją i obsługą brakujących sąsiadów
+weights_list <- nb2listw(neigh, style = "W", zero.policy = TRUE)
 
+# Podgląd liczby sąsiadów
+table(card(neigh))
+```
 
+```{r setup, include=FALSE}
+# Test globalny Morana
+moran_global <- moran.test(eu27_merged$PPP, weights_list, zero.policy = TRUE)
+print(moran_global)
 
+# Wykres rozproszenia Morana
+moran.plot(eu27_merged$PPP, weights_list, zero.policy = TRUE)
 
+# Oblicz lokalny Moran I
+local_moran <- localmoran(eu27_merged$PPP, weights_list, zero.policy = TRUE)
 
+# Dodaj wyniki do mapy
+eu27_merged$Ii <- local_moran[, "Ii"]
+eu27_merged$Pvalue <- local_moran[, "Pr(z > 0)"]
+eu27_merged$significant <- eu27_merged$Pvalue < 0.05
+```
+```{r setup, include=FALSE}
+# Model klasyczny OLS
+ols_model <- lm(PPP ~ `Electricity prices` + log(GDP) + `Jednostkowy koszt pracy` + `Średnie zarobki` + 
+`Gęstość zaludnienia` + `Ślad zużycia` + `Czas w unii europejskiej`, data = eu27_merged)
+summary(ols_model)
 
+```
+
+```{r setup, include=FALSE}
+# Test autokorelacji przestrzennej reszt (ex-ante)
+ols_resid <- residuals(ols_model)
+moran.test(ols_resid, weights_list, zero.policy = TRUE)
+
+```
+
+```{r setup, include=FALSE}
+library(spatialreg)
+sar_model <- lagsarlm(GDP ~ UNEMP + RKONS, data = eu27_merged, listw = weights_list, zero.policy = TRUE)
+summary(sar_model)
+
+```
 
 
 
