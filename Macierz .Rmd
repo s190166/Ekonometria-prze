@@ -1,13 +1,15 @@
 ---
-title: "Untitled"
-output: html_document
-date: "2025-05-11"
+title: "Ekonometria Przeszczana"
+subtitle: ""
+author: ""
+date: "06.06.2025"
+output: rmdformats::readthedown
+css: "style.css"
 ---
 
-
-```{r setup, include=FALSE}
+```{r setup_pakiety, include=FALSE}
 # Pakiety 
-install.packages(c("tidyr", "readxl", "dplyr", "ggplot", "sf", "spdep", "sf", "spdep", "tmap", "tidyverse", "dplyr", "spatialreg"))
+install.packages(c("tidyr", "readxl", "dplyr", "ggplot", "sf", "spdep", "sf", "spdep", "tmap", "tidyverse", "dplyr", "spatialreg", "plm", "splm", "tmap"))
 library(readxl)
 library(dplyr)
 library(ggplot2)
@@ -18,16 +20,19 @@ library(tmap)
 library(tidyverse)
 library(dplyr)
 library(spatialreg)
+library(plm)
+library(splm)
+library(tmap)
 ```
-
-```{r setup, include=FALSE}
+# 1. 
+```{r setup dane, include=FALSE}
 # Wczytywanie danych 
-dane <- dane_panelowe_kopia
+dane_panelowe <- read_excel("dane_panelowe.xlsx")
+dane <- dane_panelowe 
 eu27 <- st_read("danemapy/EU27Official.shp")
 ```
 
-
-```{r setup, include=FALSE}
+```{r setup korelacja, include=FALSE}
 # Dodawanie zmiennej Y w celu ułatwienia pisania 
 dane_2024 <- dane %>% filter(rok == 2024)
 # Wykres 1:  ~ Czas w unii europejskiej
@@ -42,7 +47,7 @@ q1 <- ggplot(dane_2024, aes(x = `Czas w unii europejskiej`, y = PPP)) +
   )
 
 # Wykres 2: Y ~ Ślad zużycia
-q2 <- ggplot(dane_2024, aes(x = `Ślad zużycia`, y = Y)) +
+q2 <- ggplot(dane_2024, aes(x = `Ślad zużycia`, y = PPP)) +
   geom_point(color = "steelblue", size = 3) +
   geom_smooth(method = "lm", se = FALSE, color = "red") +
   theme_minimal() +
@@ -53,7 +58,7 @@ q2 <- ggplot(dane_2024, aes(x = `Ślad zużycia`, y = Y)) +
   )
 
 # Wykres 3: Y ~ Electricity prices
-q3 <- ggplot(dane_2024, aes(x = `Electricity prices`, y = Y)) +
+q3 <- ggplot(dane_2024, aes(x = `Electricity prices`, y = PPP)) +
   geom_point(color = "steelblue", size = 3) +
   geom_smooth(method = "lm", se = FALSE, color = "red") +
   theme_minimal() +
@@ -63,7 +68,7 @@ q3 <- ggplot(dane_2024, aes(x = `Electricity prices`, y = Y)) +
     y = "PPP"
   )
 # Wykres 4: Y ~ Jednostkowy koszt pracy
-q4 <- ggplot(dane_2024, aes(x = `Jednostkowy koszt pracy`, y = Y)) +
+q4 <- ggplot(dane_2024, aes(x = `Jednostkowy koszt pracy`, y = PPP)) +
   geom_point(color = "steelblue", size = 3) +
   geom_smooth(method = "lm", se = FALSE, color = "red") +
   theme_minimal() +
@@ -72,10 +77,11 @@ q4 <- ggplot(dane_2024, aes(x = `Jednostkowy koszt pracy`, y = Y)) +
     x = "Jednostkowy koszt pracy",
     y = "PPP"
   )
+# Wyświetlanie 
+gridExtra::grid.arrange(q1, q2, q3, q4, ncol = 2)
+```
 
-``` 
-
-```{r setup, include=FALSE}
+```{r setup wsp korelacji, include=FALSE}
 # Wybór 
 zmienne_do_korelacji <- dane_2024 %>%
   select(`PPP`,
@@ -86,12 +92,10 @@ zmienne_do_korelacji <- dane_2024 %>%
 
 # Obliczenie macierzy korelacji
 macierz_korelacji <- cor(zmienne_do_korelacji, use = "complete.obs")
-
-# Wyświetlenie wyniku
-print(round(macierz_korelacji, 2))
+print(macierz_korelacji)
 ```
-
-```{r setup, include=FALSE}
+# 2. 
+```{r setup tworzenie danych panelowych, include=FALSE}
 # upewnij się, że oba są typu character
 eu27$CNTR_ID <- as.character(eu27$CNTR_ID)
 dane_panelowe$ID <- as.character(dane_panelowe$skr)
@@ -105,27 +109,80 @@ neigh <- poly2nb(eu27_merged)
 # Lista wag z normalizacją i obsługą brakujących sąsiadów
 weights_list <- nb2listw(neigh, style = "W", zero.policy = TRUE)
 
-# Podgląd liczby sąsiadów
-table(card(neigh))
 ```
 
-```{r setup, include=FALSE}
+```{r setup Moran, include=FALSE}
 # Test globalny Morana
 moran_global <- moran.test(eu27_merged$PPP, weights_list, zero.policy = TRUE)
 print(moran_global)
+``` 
 
+```{r setup wykres Moran, include=FALSE}
 # Wykres rozproszenia Morana
 moran.plot(eu27_merged$PPP, weights_list, zero.policy = TRUE)
-
 # Oblicz lokalny Moran I
 local_moran <- localmoran(eu27_merged$PPP, weights_list, zero.policy = TRUE)
 
 # Dodaj wyniki do mapy
 eu27_merged$Ii <- local_moran[, "Ii"]
-eu27_merged$Pvalue <- local_moran[, "Pr(z > 0)"]
+eu27_merged$Pvalue <- local_moran[, "Pr(z != E(Ii))"]
 eu27_merged$significant <- eu27_merged$Pvalue < 0.05
+print(moran.plot)
 ```
-```{r setup, include=FALSE}
+
+```{r setup  kategorię klastra (LISA_cat), include=FALSE}
+# Wylicz średnią PPP
+mean_ppp <- mean(eu27_merged$PPP, na.rm = TRUE)
+
+# Stwórz kolumnę LISA_cat
+eu27_merged$LISA_cat <- "Not significant"
+
+# High-High
+eu27_merged$LISA_cat[eu27_merged$significant & eu27_merged$PPP >= mean_ppp & eu27_merged$Ii > 0] <- "High-High"
+
+# Low-Low
+eu27_merged$LISA_cat[eu27_merged$significant & eu27_merged$PPP < mean_ppp & eu27_merged$Ii > 0] <- "Low-Low"
+
+# High-Low
+eu27_merged$LISA_cat[eu27_merged$significant & eu27_merged$PPP >= mean_ppp & eu27_merged$Ii < 0] <- "High-Low"
+
+# Low-High
+eu27_merged$LISA_cat[eu27_merged$significant & eu27_merged$PPP < mean_ppp & eu27_merged$Ii < 0] <- "Low-High"
+
+Narysuj mapę klastrów
+tmap_mode("plot")
+
+tm_shape(eu27_merged) +
+  tm_fill("LISA_cat", palette = c("#F28E2B", "#C62828", "#4E79A7", "#59A14F", "grey"),
+          title = "LISA Cluster") +
+  tm_borders()
+
+
+```
+
+```{r setup Moran mapa istotności, include=FALSE}
+###Mapa istotności LISA alfa=0,05
+# flaga istotności
+signif_lisa <- ifelse(local_moran[, "Pr(z != E(Ii))"] <= 0.05, 1, 0)
+
+# wykres
+plot(st_geometry(eu27_merged), border = "grey", main = paste("Mapa istotności LISA (p ≤", 0.05, ")"))
+plot(st_geometry(eu27_merged), col = c("white", "red")[signif_lisa + 1], add = TRUE)
+# legenda
+legend("topleft", legend = c("nieistotny", "istotny"), fill = c("white", "red"), bty = "n")
+
+###Mapa istotności z gradientem (CHYBA ŁADNIEJSZA)
+tm_shape(eu27_merged) +
+tm_fill("Pvalue",
+        palette = "-Blues",
+        style = "cont",
+        title = "p-value") +
+  tm_borders() +
+  tm_layout(title = "Mapa istotności LISA")
+```
+
+# 3 
+```{r setup OLS, include=FALSE}
 # Model klasyczny OLS
 ols_model <- lm(PPP ~ `Electricity prices` + log(GDP) + `Jednostkowy koszt pracy` + `Średnie zarobki` + 
 `Gęstość zaludnienia` + `Ślad zużycia` + `Czas w unii europejskiej`, data = eu27_merged)
@@ -133,24 +190,190 @@ summary(ols_model)
 
 ```
 
-```{r setup, include=FALSE}
+```{r setup ex-ante, include=FALSE}
 # Test autokorelacji przestrzennej reszt (ex-ante)
 ols_resid <- residuals(ols_model)
 moran.test(ols_resid, weights_list, zero.policy = TRUE)
 
 ```
 
-```{r setup, include=FALSE}
-library(spatialreg)
-sar_model <- lagsarlm(GDP ~ UNEMP + RKONS, data = eu27_merged, listw = weights_list, zero.policy = TRUE)
-summary(sar_model)
+```{r setup Macierz, include=FALSE}
+# Wczytanie pliku z GeoDa
+gwt_file <- "danemapy/EU27OfficialWE5.gwt" 
+nb_ek <- read.gwt2nb(gwt_file)
+
+# Tworzenie listy wag 
+lw_ek <- nb2listw(nb_ek, style = "W", zero.policy = TRUE)
+
+eu27_merged <- eu27_merged[!duplicated(eu27_merged[, c("ID", "rok")]), ]
+panel <- pdata.frame(eu27_merged, index = c("ID", "rok"))
+
+# Usuń duplikaty (jeśli jeszcze nie)
+eu27_merged <- eu27_merged[!duplicated(eu27_merged[, c("ID", "rok")]), ]
+
+# Tworzenie panelu
+panel <- pdata.frame(eu27_merged, index = c("ID", "rok"))
 
 ```
 
+Modele panelowe
+
+```{r setup sar, include=FALSE}
+# Oszacuj modele panelowe przestrzenne z macierzą euklidesową
+# SAR (Spatial Autoregressive)
+sar_panel_ek <- spml((PPP) ~ Electricity.prices + log(GDP) + Jednostkowy.koszt.pracy + Średnie.zarobki + Gęstość.zaludnienia + Ślad.zużycia + Czas.w.unii.europejskiej,
+                     data = panel, listw = lw_ek,
+                     model = "within", effect = "individual",
+                     lag = TRUE, spatial.error = "b")
+# Podsumowanie modelu
+summary(sar_panel_ek)
+
+```
+
+```{r setup sem, include=FALSE}
+# SEM – przestrzenne zależności w błędach
+sem_panel_ek <- spml((PPP) ~ Electricity.prices + log(GDP) + Jednostkowy.koszt.pracy + Średnie.zarobki + Gęstość.zaludnienia + Ślad.zużycia + Czas.w.unii.europejskiej,
+                     data = panel, listw = lw_ek,
+                     model = "within", effect = "individual",
+                     lag = FALSE, spatial.error = "b")
+
+```
+
+```{r setup sac, include=FALSE}
+# SAC – pełny model: SAR + SEM
+sac_panel_ek <- spml((PPP) ~ Electricity.prices + log(GDP) + Jednostkowy.koszt.pracy + Średnie.zarobki + Gęstość.zaludnienia + Ślad.zużycia + Czas.w.unii.europejskiej,
+                     data = panel, listw = lw_ek,
+                     model = "within", effect = "individual",
+                     lag = TRUE, spatial.error = "b") 
+#
+summary(sac_panel_ek)
+```
+
+```{r setup Podsumowanie modele SAR, SEM, SAC, include=FALSE}
+# Podsumowanie modele SAR, SEM, SAC
+# Funkcja wyciągająca kluczowe wyniki
+extract_results <- function(model, model_name) {
+  s <- summary(model)
+  data.frame(
+    Model = model_name,
+    Zmienna = rownames(s$CoefTable),
+    s$CoefTable,
+    row.names = NULL
+  )
+}
+
+# Tworzenie ramki danych
+results <- rbind(
+  extract_results(sar_panel_ek, "SAR"),
+  extract_results(sem_panel_ek, "SEM"),
+  extract_results(sac_panel_ek, "SAC")
+)
+
+# Wyświetlenie tabeli
+print(results, digits = 3)
+```
+
+# 4 Modele Mieszane Panelowe (modele kombinowane)
+
+```{r setup modele kombinowane, include=FALSE}
+# a) SAR-FE
+sar_fe <- spml(
+  PPP ~ Electricity.prices + log(GDP) + Jednostkowy.koszt.pracy + 
+    Średnie.zarobki + Gęstość.zaludnienia + Ślad.zużycia + Czas.w.unii.europejskiej,
+  data = panel,
+  listw = lw_ek,
+  model = "within",
+  effect = "individual",
+  lag = TRUE
+)
+summary(sar_fe)
+
+# b) SAR-RE
+sar_re <- spml(
+  PPP ~ Electricity.prices + log(GDP) + Jednostkowy.koszt.pracy + 
+    Średnie.zarobki + Gęstość.zaludnienia + Ślad.zużycia + Czas.w.unii.europejskiej,
+  data = panel,
+  listw = lw_ek,
+  model = "random",
+  effect = "individual",
+  lag = TRUE
+)
+summary(sar_re)
+
+# c) SEM-FE
+sem_fe <- spml(
+  PPP ~ Electricity.prices + log(GDP) + Jednostkowy.koszt.pracy + 
+    Średnie.zarobki + Gęstość.zaludnienia + Ślad.zużycia + Czas.w.unii.europejskiej,
+  data = panel,
+  listw = lw_ek,
+  model = "within",
+  effect = "individual",
+  spatial.error = "b"
+)
+summary(sem_fe)
+
+# d) SEM-RE
+sem_re <- spml(
+  PPP ~ Electricity.prices + log(GDP) + Jednostkowy.koszt.pracy + 
+    Średnie.zarobki + Gęstość.zaludnienia + Ślad.zużycia + Czas.w.unii.europejskiej,
+  data = panel,
+  listw = lw_ek,
+  model = "random",
+  effect = "individual",
+  spatial.error = "b"
+)
+summary(sem_re)
 
 
 
+# Funkcja do ekstrakcji współczynników z modelu spml
+get_coef_table <- function(model, model_name) {
+  coefs <- summary(model)$CoefTable
+  data.frame(
+    Zmienna = rownames(coefs),
+    Współczynnik = round(coefs[, 1], 3),
+    SE = round(coefs[, 2], 3),
+    P_wartość = round(coefs[, 4], 3),
+    Model = model_name
+  )
+}
 
+# Tworzymy podsumowanie dla wszystkich modeli
+tabela <- bind_rows(
+  get_coef_table(sar_fe, "SAR-FE"),
+  get_coef_table(sar_re, "SAR-RE"),
+  get_coef_table(sem_fe, "SEM-FE"),
+  get_coef_table(sem_re, "SEM-RE")
+)
 
+# Zamieniamy na szeroką tabelę
+tabela_wide <- tabela %>%
+  unite("Estymata (SE)", Współczynnik, SE, sep = " (") %>%
+  mutate(`Estymata (SE)` = paste0(`Estymata (SE)`, ")")) %>%
+  select(Zmienna, Model, `Estymata (SE)`, P_wartość) %>%
+  pivot_wider(names_from = Model, values_from = c(`Estymata (SE)`, P_wartość))
 
+# Wyświetlenie tabeli
+knitr::kable(tabela_wide, caption = "Porównanie współczynników i istotności w modelach SAR i SEM")
+```
 
+# 5. Spatial Durbin Model (SDM)
+
+```{r setup sdm, include=FALSE}
+# Model SDM
+sdm_model <- spml(
+  PPP ~ Electricity.prices + log(GDP) + Jednostkowy.koszt.pracy + 
+    Średnie.zarobki + Gęstość.zaludnienia + Ślad.zużycia + Czas.w.unii.europejskiej,
+  data = panel,
+  listw = lw_ek,
+  model = "within",
+  effect = "individual",
+  lag = TRUE
+)
+summary(sdm_model)
+```
+# 6. Wybór najleszpego modelu 
+```{r setup Wybór najleszpego modelu , include=FALSE}
+### 
+```
+# 7. Podsumowanie 
