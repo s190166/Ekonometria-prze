@@ -1,0 +1,643 @@
+---
+title: "Ekonometria przestrzenna"
+subtitle: "Patrycja Karpicka, Wiktoria Itych, Filip Bieszke, Michał Książek"
+author: "Patrycja Karpicka, Wiktoria Itych, Filip Bieszke, Michał Książek"
+date: "06.06.2025"
+output: rmdformats::readthedown
+css: "style.css"
+---
+
+```{r setup_pakiety, include=FALSE}
+# Pakiety 
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(sf)
+library(spdep)
+library(tmap)
+library(tidyverse)
+library(spatialreg)
+library(plm)
+library(splm)
+library(tmap)
+library(corrplot)
+library(lmtest)
+library(whitestrap)
+library(tseries)
+```
+
+```{r setup dane, include=FALSE}
+# Wczytywanie danych 
+dane_panelowe <- read_xlsx("dane_panelowe.xlsx")
+dane <- dane_panelowe 
+eu27 <- st_read("danemapy/EU27Official.shp")
+```
+
+# 1. Wprowadzenie do projektu
+Tematem projektu jest estymacja przyczynowo-skutkowych modeli przestrzennych wyjaśniających kształtowanie się parytetu siły nabywczej (PPP) w 27 krajach Unii Europejskiej w latach 2013-2024. Dane zostały pobrane z Eurostatu. Dobór zmiennych oraz interpretacja ich wpływu opierają się na teoriach Balassy-Samuelsona (1964), koncepcjach konwergencji gospodarczej oraz wynikach badań zawartych m.in. w pracach Gelb i Diofasi (2016) oraz Taylor i Taylor (2004), a także w raportach OECD, IMF (International Monetary Fund) i KE (Komisja Europejska). Przeprowadzone testy oraz estymowane modele zostały opracowane w oparciu o materiały dydaktyczne z kursu Ekonometria przestrzenna autorstwa dr A. Kordalskiej, stanowiące podstawę metodyczną niniejszej analizy.
+
+## Uzasadnienie wyboru zjawiska
+Wybór parytetu siły nabywczej (PPP) jako zmiennej objaśnianej znajduje silne uzasadnienie zarówno w teorii ekonomicznej, jak i w praktyce analiz porównawczych. PPP stanowi jedno z najważniejszych narzędzi służących do realnej oceny poziomu życia, siły nabywczej pieniądza oraz stopnia rozwoju gospodarczego w ujęciu międzynarodowym. W odróżnieniu od nominalnych kursów walutowych, które podlegają wpływom spekulacyjnym, politycznym i cyklicznym, PPP opiera się na faktycznym koszcie zakupu identycznego koszyka dóbr i usług w różnych krajach, co czyni go bardziej stabilnym i reprezentatywnym wskaźnikiem realnych różnic ekonomicznych. 
+
+Ujęcie PPP jako zmiennej zależnej umożliwia analizę głębszych mechanizmów kształtujących poziom cen względnych pomiędzy państwami – mechanizmów, które często nie są dostrzegalne w ramach standardowych wskaźników makroekonomicznych. Dzięki temu możliwe staje się uchwycenie złożonych zależności między czynnikami takimi jak poziom dochodów, koszty pracy, presja inflacyjna czy struktura demograficzno-przestrzenna a realną wartością pieniądza. Co więcej, PPP odgrywa coraz większą rolę w kontekście integracji gospodarczej i polityki spójności Unii Europejskiej, gdzie pełni funkcję korekcyjną w alokacji funduszy i ocenie poziomu konwergencji. 
+
+Z tych względów PPP nie tylko nadaje się do badań empirycznych jako zmienna objaśniana, ale wręcz staje się nośnikiem odpowiedzi na pytania o to, jak fundamentalne cechy gospodarek wpływają na realną siłę nabywczą ich obywateli. W dobie globalizacji i regionalnej integracji ekonomicznej zrozumienie determinantów PPP pozwala na bardziej precyzyjną diagnozę różnic rozwojowych oraz na formułowanie rekomendacji politycznych sprzyjających równoważeniu tych różnic. 
+
+## Uzasadnienie wyboru zmiennych objaśniających
+Parytet siły nabywczej (Purchasing Power Parity, PPP) jest kluczową kategorią w porównaniach międzynarodowych, służącą do oceny realnej siły nabywczej walut i poziomu życia w poszczególnych krajach. W literaturze ekonomicznej wskazuje się na szereg czynników makroekonomicznych i strukturalnych, które wpływają na poziom PPP. Wśród nich na szczególną uwagę zasługują: produkt krajowy brutto (PKB) per capita, średnie wynagrodzenia, stopa bezrobocia, jednostkowy koszt pracy, inflacja, ceny energii elektrycznej, gęstość zaludnienia oraz długość członkostwa w Unii Europejskiej. 
+
+Poziom PKB per capita w ujęciu realnym i skorygowanym o PPP jest klasycznym wyznacznikiem poziomu rozwoju gospodarczego kraju i odzwierciedla jego produktywność. W kontekście teorii Balassy-Samuelsona wyższa produktywność w sektorach tradable w krajach wysoko rozwiniętych prowadzi do wzrostu wynagrodzeń w całej gospodarce, co z kolei podnosi ceny w sektorach non-tradable i skutkuje wyższym ogólnym poziomem cen, a tym samym wyższym PPP (Balassa, 1964; Samuelson, 1964; Taylor & Taylor, 2004). 
+
+Średnie wynagrodzenia są ściśle powiązane z poziomem PKB per capita i stanowią istotny czynnik kształtujący siłę nabywczą ludności. Wyższe zarobki umożliwiają większą konsumpcję, ale jednocześnie wpływają na wzrost kosztów produkcji i cen towarów i usług, co bezpośrednio wpływa na relatywny poziom cen i PPP (OECD, 2023). 
+
+Stopa bezrobocia oddziałuje na PPP głównie poprzez mechanizmy podaży i popytu na rynku pracy. Wysokie bezrobocie może prowadzić do obniżenia płac i ograniczenia popytu konsumpcyjnego, co w dłuższym okresie może wywierać presję deflacyjną i wpływać na poziom cen, a tym samym zmieniać wartość PPP (IMF, 2020). Dodatkowo, kraje o trwałym bezrobociu strukturalnym mogą wykazywać niższy poziom cen względnych, co sztucznie zawyża ich PPP. 
+
+Jednostkowy koszt pracy (Unit Labour Cost, ULC) jest ważnym wskaźnikiem konkurencyjności kosztowej gospodarki. Wyższy ULC oznacza, że produkcja dóbr i usług staje się relatywnie droższa, co przekłada się na wzrost ogólnego poziomu cen. W efekcie PPP rośnie, gdyż koszyk dóbr w danym kraju staje się relatywnie droższy w porównaniu z innymi gospodarkami (European Commission, 2023). 
+
+Inflacja, będąca miarą tempa wzrostu cen, jest jednym z kluczowych mechanizmów korekcyjnych w teorii relatywnego PPP. Zgodnie z tą teorią, różnice w inflacji między krajami powinny prowadzić do proporcjonalnych zmian w nominalnym kursie walutowym, tak aby utrzymać stały poziom siły nabywczej (Taylor & Taylor, 2004). W praktyce oznacza to, że kraje o wyższej inflacji powinny wykazywać wyższy PPP, jeśli kurs nominalny nie dostosowuje się natychmiast. 
+
+Ceny energii elektrycznej są ważnym składnikiem kosztów produkcji i konsumpcji w gospodarce. Znaczące różnice w kosztach energii między państwami członkowskimi UE wpływają na ogólny poziom cen konsumpcyjnych, zwłaszcza w sektorach energochłonnych. Wyższe ceny energii podnoszą koszty życia i produkcji, co przekłada się na wzrost PPP (Eurostat, 2023). 
+
+Gęstość zaludnienia może pośrednio wpływać na PPP poprzez presję cenową w obszarach zurbanizowanych. Regiony o wysokiej gęstości zaludnienia zazwyczaj cechują się wyższymi kosztami utrzymania, szczególnie w sektorach takich jak mieszkalnictwo czy transport, co wpływa na lokalne poziomy cen i może rzutować na skorygowane PPP w analizach subnarodowych.(Brueckner, 2000)
+
+Wreszcie, czas członkostwa w Unii Europejskiej jest czynnikiem instytucjonalnym, który może wpływać na PPP poprzez procesy konwergencji gospodarczej, spadek barier handlowych oraz integrację rynków pracy i kapitału. Badania empiryczne wskazują, że dłuższe członkostwo w UE sprzyja zbliżaniu się poziomów cen i wynagrodzeń do średniej unijnej, co prowadzi do relatywnego wzrostu PPP w krajach peryferyjnych (European Commission, 2023). 
+
+# 2. Rozpoczęcie pracy w R studio
+
+## Wykresy zmiennych
+Poniższe wykresy przedstawiają zależność pomiędzy PPP a poszczególnymi zmiennymi.
+
+```{r setup korelacja, echo=FALSE}
+# Dodawanie zmiennej Y w celu ułatwienia pisania 
+dane_2024 <- dane %>% filter(rok == 2024)
+# Wykres 1:  ~ Czas w unii europejskiej
+q1 <- ggplot(dane_2024, aes(x = `Czas w unii europejskiej`, y = PPP)) +
+  geom_point(color = "steelblue", size = 3) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  theme_minimal() +
+  labs(
+    title = "Zależność PPP od Czasu w UE",
+    x = "Czas w unii europejskiej",
+    y = "PPP"
+  )
+
+# Wykres 2: Y ~ Ślad zużycia
+q2 <- ggplot(dane_2024, aes(x = `Ślad zużycia`, y = PPP)) +
+  geom_point(color = "steelblue", size = 3) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  theme_minimal() +
+  labs(
+    title = "Zależność PPP od Śladu zużycia",
+    x = "Ślad zużycia",
+    y = "P"
+  )
+
+# Wykres 3: Y ~ Electricity prices
+q3 <- ggplot(dane_2024, aes(x = `Electricity prices`, y = PPP)) +
+  geom_point(color = "steelblue", size = 3) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  theme_minimal() +
+  labs(
+    title = "Zależność PPP od Ceny energii elektrycznej",
+    x = "Electricity prices",
+    y = "PPP"
+  )
+# Wykres 4: Y ~ Jednostkowy koszt pracy
+q4 <- ggplot(dane_2024, aes(x = `Jednostkowy koszt pracy`, y = PPP)) +
+  geom_point(color = "steelblue", size = 3) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  theme_minimal() +
+  labs(
+    title = "Zależność PPP od Jednostkowego kosztu pracy",
+    x = "Jednostkowy koszt pracy",
+    y = "PPP"
+  )
+# Wykres 5: Y ~ GDP
+q5 <- ggplot(dane_2024, aes(x = GDP, y = PPP)) +
+  geom_point(color = "steelblue", size = 3) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  theme_minimal() +
+  labs(
+    title = "Zależność PPP od GDP",
+    x = "GDP",
+    y = "PPP"
+  )
+
+# Wykres 6: Y ~ Stopa bezrobocia
+q6 <- ggplot(dane_2024, aes(x = `Stopa bezrobocia`, y = PPP)) +
+  geom_point(color = "steelblue", size = 3) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  theme_minimal() +
+  labs(
+    title = "Zależność PPP od Stopy bezrobocia",
+    x = "Stopa bezrobocia",
+    y = "PPP"
+  )
+
+# Wykres 8: Y ~ Średnie zarobki
+q8 <- ggplot(dane_2024, aes(x = `Średnie zarobki`, y = PPP)) +
+  geom_point(color = "steelblue", size = 3) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  theme_minimal() +
+  labs(
+    title = "Zależność PPP od Średnich zarobków",
+    x = "Średnie zarobki",
+    y = "PPP"
+  )
+
+
+# Wyświetlanie 
+gridExtra::grid.arrange(q1, q2, q3, q4, q5, q6, q8, ncol = 2)
+```
+
+## Macierz korelacji
+Macierz korelacji wskazuje, że parytet siły nabywczej (PPP) jest silnie dodatnio skorelowany ze śladem zużycia CO₂ (0,81), długością członkostwa w Unii Europejskiej (0,67) oraz cenami energii elektrycznej (0,65), co świadczy o powiązaniu siły nabywczej z poziomem rozwoju i konsumpcji. Umiarkowanie dodatnie korelacje obserwuje się w przypadku średnich zarobków (0,46), stopy bezrobocia (0,24) oraz PKB (0,12). Z kolei jednostkowy koszt pracy (–0,70) i inflacja (–0,45) wykazują wyraźnie negatywny związek z PPP, co wskazuje ich ograniczający wpływ na realną siłę nabywczą.
+
+```{r setup wsp korelacji, echo=FALSE}
+# Wybór zmiennych do korelacji (uwaga na spacje i znaki specjalne – używaj backticków ``)
+zmienne_do_korelacji <- dane_2024 %>%
+  select(
+    PPP,
+    `Czas w unii europejskiej`,
+    `Ślad zużycia`,
+    `Electricity prices`,
+    `Jednostkowy koszt pracy`,
+    GDP, Inflancja,
+    `Stopa bezrobocia`,
+    `Średnie zarobki`
+  )
+
+# Obliczenie macierzy korelacji
+macierz_korelacji <- cor(zmienne_do_korelacji, use = "complete.obs")
+
+# Wizualizacja korelacji z użyciem corrplot
+corrplot(macierz_korelacji,
+         method = "color",                        
+         type = "full",                           
+         col = colorRampPalette(c("red", "white", "blue"))(200), 
+         addCoef.col = "white",                   
+         tl.col = "black",                        
+         tl.srt = 45,                             
+         number.cex = 0.7,                        
+         mar = c(0, 0, 2, 0))
+print(corrplot)
+```
+## Badanie zmiennej objaśnianej pod kątem istnienia zależności 
+
+```{r setup tworzenie danych panelowych, include=FALSE}
+# upewnij się, że oba są typu character
+eu27$CNTR_ID <- as.character(eu27$CNTR_ID)
+dane_panelowe$ID <- as.character(dane_panelowe$skr)
+
+# teraz dopiero łączymy
+eu27_merged <- left_join(eu27, dane_panelowe, by = c("CNTR_ID" = "skr"))
+
+# Tworzymy relacje sąsiedztwa
+neigh <- poly2nb(eu27_merged)
+
+# Lista wag z normalizacją i obsługą brakujących sąsiadów
+weights_list <- nb2listw(neigh, style = "W", zero.policy = TRUE)
+
+```
+
+## Statystyka Morana I
+Test Morana I jest statystyką badającą przestrzenne zależności globalne. Globalna zależność przestrzenna (globalne grupowanie się danych) wynika z występowania zależności przestrzennej PPP w obrębie całego badanego obszaru, czyli krajów UE27. Hipoteza zerowa mówi, że występuje brak powiązań przestrzennych, to znaczy wartości PPP są losowo rozmieszczone pomiędzy krajami. Natomiast hipoteza alternatywna mówi, że występują powiązania przestrzenne. Na podstawie otrzymanego p-value 2,2*10^(-16), mniejszego od poziomu istotności wynoszącego 0,05, należy odrzucić hipotezę zerową na rzecz alternatywnej. Wartość statystyki Morana I równa 0,76 oznacza, że występuje bardzo silna dodatnia autokorelacja przestrzenna zmiennej PPP między krajami UE27. Kraje sąsiadujące ze sobą mają zbliżony poziom PPP. Innymi słowy: PPP nie jest przestrzennie losowe, lecz wykazuje przestrzenną strukturę klastra. Modelowanie przestrzenne (SAR, SEM) jest wskazane. 
+
+```{r setup Moran, echo=FALSE}
+# Test globalny Morana
+moran_global <- moran.test(eu27_merged$PPP, weights_list, zero.policy = TRUE)
+print(moran_global)
+``` 
+Wizualnym potwierdzeniem powyższych wniosków jest wykres rozproszenia Morana, który przedstawia zależność autoregresyjną – relację standaryzowanej wartości PPPw danej lokalizacji do standaryzowanej wartości PPP w innych lokalizacjach (lagged eu27_merged$PPP). Większość obserwacji skupia się w pierwszej (High-High) i trzeciej (Low-Low) ćwiartce wykresu, co wskazuje na obecność dodatnich klastrów – regiony o wysokim PPP otoczone są przez inne regiony o wysokim PPP, a regiony o niskim PPP sąsiadują z podobnie słabymi gospodarczo obszarami. Obserwacje znajdujące się w drugiej (Low-High) i czwartej (High-Low) ćwiartce mogą być traktowane jako przestrzenne outliery – odstępstwa od lokalnego kontekstu.  
+
+```{r setup wykres Moran, echo=FALSE}
+# Wykres rozproszenia Morana
+moran.plot(eu27_merged$PPP, weights_list, zero.policy = TRUE)
+# Oblicz lokalny Moran I
+local_moran <- localmoran(eu27_merged$PPP, weights_list, zero.policy = TRUE)
+
+# Dodaj wyniki do mapy
+eu27_merged$Ii <- local_moran[, "Ii"]
+eu27_merged$Pvalue <- local_moran[, "Pr(z != E(Ii))"]
+eu27_merged$significant <- eu27_merged$Pvalue < 0.05
+print(moran.plot)
+```
+## Mapa klastrów
+Wyniki lokalnych wskaźników autokorelacji przestrzennej (LISA) zostały zobrazowane na mapie klastra LISA, przedstawiającej rozmieszczenie czterech typów przestrzennych powiązań dla siły nabywczej (PPP) w krajach UE. Klasyfikacja uwzględnia zarówno wartość PPP danego kraju, jak i wartość PPP jego sąsiadów, dzieląc obserwacje na istotne klastry: High-High, Low-Low, High-Low oraz przypadki nieistotne statystycznie. 
+
+Kolorem pomarańczowym oznaczono kraje o wysokim PPP otoczone przez inne kraje również o wysokim PPP (high-high). Zidentyfikowano szeroki pas takich krajów w Europie Zachodniej i Północnej, m.in. Niemcy, Belgia, Holandia, Irlandia, Francja, Włochy oraz państwa skandynawskie, czyli Szwecja i Finlandia. Wskazuje to na obecność regionalnych „klastrów dobrobytu” – zgrupowań przestrzennych krajów o wysokiej sile nabywczej. 
+
+Kolorem niebieskim oznaczono obszary o niskim PPP otoczone przez kraje o podobnie niskim poziomie siły nabywczej (low-low). Taki wzorzec zaobserwowano głównie w Europie Środkowo-Wschodniej, obejmując m.in. Litwę, Łotwę, Polskę, Czechy, Słowację, Węgry, Rumunię, Bułgarię, Grecję i Chorwację. Sugeruje to istnienie trwałych przestrzennych obszarów o relatywnie niższym poziomie życia. 
+
+Kolorem czerwonym oznaczono obszary o wysokim PPP otoczone przez sąsiadów o niskim PPP (high-low). Taki przypadek wystąpił np. w Austrii czy Estonii, co może świadczyć o ich wyjątkowo dobrej sytuacji ekonomicznej względem najbliższego otoczenia. Są to obserwacje odstające od lokalnego trendu. 
+
+Kraje oznaczone kolorem zielonym, takie jak Portugalia, Hiszpania czy Cypr, zostały sklasyfikowane jako statystycznie nieistotne pod względem lokalnej autokorelacji przestrzennej. Ich poziom PPP nie wykazuje jednoznacznego przestrzennego wzorca względem sąsiadów.
+
+```{r setup  kategorię klastra LISA_cat, echo=FALSE}
+# Wylicz średnią PPP
+mean_ppp <- mean(eu27_merged$PPP, na.rm = TRUE)
+
+# Stwórz kolumnę LISA_cat
+eu27_merged$LISA_cat <- "Not significant"
+
+# High-High
+eu27_merged$LISA_cat[eu27_merged$significant & eu27_merged$PPP >= mean_ppp & eu27_merged$Ii > 0] <- "High-High"
+
+# Low-Low
+eu27_merged$LISA_cat[eu27_merged$significant & eu27_merged$PPP < mean_ppp & eu27_merged$Ii > 0] <- "Low-Low"
+
+# High-Low
+eu27_merged$LISA_cat[eu27_merged$significant & eu27_merged$PPP >= mean_ppp & eu27_merged$Ii < 0] <- "High-Low"
+
+# Low-High
+eu27_merged$LISA_cat[eu27_merged$significant & eu27_merged$PPP < mean_ppp & eu27_merged$Ii < 0] <- "Low-High"
+tmap_mode("plot")
+
+tm_shape(eu27_merged) +
+  tm_fill("LISA_cat", palette = c("#F28E2B", "#C62828", "#4E79A7", "#59A14F", "grey"),
+          title = "LISA Cluster") +
+  tm_borders()
+
+
+```
+## Mapa istotności
+Mapa istotności LISA prezentuje przestrzenny rozkład wyników lokalnych testów Morana I dla zmiennej PPP w krajach UE, przy założonym poziomie istotności α = 0,05. Na mapie kolorem czerwonym oznaczono kraje, dla których lokalna autokorelacja przestrzenna została uznana za istotną statystycznie (p ≤ 0,05). Są to regiony, w których wartość PPP pozostaje w silnym związku z wartością PPP w krajach sąsiednich – zarówno dodatnim (klastry High-High i Low-Low), jak i ujemnym (High-Low i Low-High). Kolorem białym oznaczono obszary, w których takiej istotności nie stwierdzono – zmienność PPP w tych krajach nie wykazuje wyraźnych wzorców przestrzennych względem najbliższego otoczenia. 
+
+Z analizy wynika, że większość krajów UE charakteryzuje się istotną lokalną autokorelacją przestrzenną PPP, co stanowi silne potwierdzenie przestrzennego uwarunkowania siły nabywczej w regionie.  Jedynie Portugalia, Hiszpania i Cypr nie wykazują istotnej lokalnej zależności przestrzennej parytety siły nabywczej. 
+
+```{r setup Moran mapa istotności, echo=FALSE}
+###Mapa istotności LISA alfa=0,05
+# flaga istotności
+signif_lisa <- ifelse(local_moran[, "Pr(z != E(Ii))"] <= 0.05, 1, 0)
+
+# wykres
+plot(st_geometry(eu27_merged), border = "grey", main = paste("Mapa istotności LISA (p ≤", 0.05, ")"))
+plot(st_geometry(eu27_merged), col = c("white", "red")[signif_lisa + 1], add = TRUE)
+# legenda
+legend("topleft", legend = c("nieistotny", "istotny"), fill = c("white", "red"), bty = "n")
+
+```
+
+
+# 3. Budowanie modeli przyczynowo-skutkowych
+
+Wraz z rozpoczęciem modelowania zdecydowano się na usunięcie zmiennych objaśniających inflacja i stopa bezrobocia, ponieważ zaniżały one wyniki modeli panelowych. Istotność statystyczna pozostałych zmiennych objaśniających była na niższym poziomie oraz podwyższały one p-value lambdy.
+
+### Model podstawowy OLS (bez interakcji)
+W ramach przeprowadzonej analizy oszacowano model regresji liniowej mający na celu wyjaśnienie zmienności siły nabywczej (PPP) w krajach Unii Europejskiej na podstawie wybranych zmiennych społeczno-ekonomicznych. Model uwzględniał takie czynniki jak: ceny energii elektrycznej, logarytm produktu krajowego brutto (PKB), jednostkowy koszt pracy, średnie wynagrodzenia, gęstość zaludnienia, ślad zużycia oraz czas członkostwa w Unii Europejskiej. 
+
+Model charakteryzuje się bardzo wysokim współczynnikiem determinacji – wartość R² wynosi 0,8153, a skorygowany R² to 0,8112. Oznacza to, że ponad 81% zmienności PPP w krajach UE można wyjaśnić na podstawie przyjętych w modelu zmiennych objaśniających. Statystyka F równa 199,3 oraz p-wartość < 2,2e-16 wskazują, że model jako całość jest istotny statystycznie, co potwierdza przydatność zastosowanych zmiennych w wyjaśnianiu badanego zjawiska. 
+
+Wyniki regresji pokazują, że większość zmiennych istotnie wpływa na siłę nabywczą. Wyższe ceny energii elektrycznej i logarytm PKB mają dodatni wpływ na PPP, co odzwierciedla rozwój gospodarczy. Jednostkowy koszt pracy działa negatywnie, obniżając PPP przez spadek konkurencyjności. Średnie zarobki silnie podnoszą siłę nabywczą. Gęstość zaludnienia ma negatywny wpływ, sugerując wyższe koszty życia w bardziej zatłoczonych regionach. Dodatnia zależność śladu zużycia CO2 z PPP potwierdza związek dobrobytu z większym zużyciem. Czas członkostwa w UE okazał się nieistotny statystycznie, co wskazuje, że sam fakt długości przynależności nie wpływa bezpośrednio na siłę nabywczą po uwzględnieniu innych czynników. 
+
+```{r setup OLS, include=TRUE}
+# Model klasyczny OLS
+ols_model <- lm(PPP ~ `Electricity prices` + log(GDP) + `Jednostkowy koszt pracy` + `Średnie zarobki` + 
+`Gęstość zaludnienia` + `Ślad zużycia` + `Czas w unii europejskiej`, data = eu27_merged)
+summary(ols_model)
+
+```
+### Testy statystyczne modelu OLS
+Przeprowadzone testy diagnostyczne dla modelu OLS wskazują na istotne odstępstwa od klasycznych założeń modelu liniowego. Zarówno test Breuscha-Pagana (p < 2,2e-16), jak i test White’a (p = 4e-06) wykazują istotną heteroskedastyczność, co oznacza, że wariancja składnika losowego nie jest stała i może zależeć od poziomu zmiennych objaśniających. Test Durbina-Watsona (DW = 0,30676, p < 2,2e-16) jednoznacznie wskazuje na silną dodatnią autokorelację składnika losowego, co stanowi istotne naruszenie założeń klasycznego modelu regresji. Z kolei testy normalności – Jarque’a-Bery (p = 0,2906) oraz Shapiro-Wilka (p = 0,1013) – nie dają podstaw do odrzucenia hipotezy o normalnym rozkładzie reszt. Oznacza to, że mimo występowania heteroskedastyczności i autokorelacji, rozkład reszt można uznać za zgodny z normalnością, co umożliwia dalsze wnioskowanie przy zastosowaniu odpowiednich korekt estymatora. Kryterium AIC modelu OLS wynosi 2476,28.
+
+```{r setup, include=TRUE}
+#weryfikacja modelu
+ols_resid <- residuals(ols_model)
+AIC(ols_model)
+
+#Breusch-Pagan - heteroskedastyczność
+bptest(ols_model, studentize=FALSE)
+
+#White - heteroskedastyczność
+white_test(ols_model)
+
+#Durbin-Watson
+dwtest(ols_model)
+
+#Jarque-Bera - normalność reszt
+jarque.bera.test(ols_resid)
+
+#Shapiro-Wilk - normalność
+shapiro.test(ols_resid)
+```
+W celu oceny poprawności klasycznego modelu regresji OLS dla siły nabywczej (PPP) przeprowadzono również test Morana I na resztach. Wynik (I = 0,4523; p < 2,2e–16) wskazuje na silną dodatnią autokorelację przestrzenną. Innymi słowy, w modelu występuje systematyczna zależność przestrzenna w błędach, która została pominięta przy estymacji. Oznacza to naruszenie jednego z podstawowych założeń klasycznego modelu regresji – niezależności składnika losowego. Skutkiem jest nieefektywność estymatora OLS i ryzyko błędnych wniosków statystycznych. 
+
+Ponadto, mnożnik Lagrange'a jednoznacznie wskazuje na silną obecność zależności przestrzennych w modelu OLS wyjaśniającym zmienną PPP. Zarówno testy podstawowe (RSerr, RSlag), jak i ich wersje skorygowane (adjRSerr, adjRSlag), a także test łączony (SARMA), są istotne statystycznie na poziomie p < 0.001. Oznacza to, że w danych występują istotne efekty przestrzenne zarówno w składniku losowym, jak i w strukturze zależności między obserwacjami. Wyniki te sugerują, że model klasyczny jest nieadekwatny i powinien zostać zastąpiony przez model przestrzenny, np. SAR, SEM lub SARMA. 
+
+```{r testy ex-ante}
+# testy ex-ante
+# test Morana dla reszt
+moran.test(ols_resid, weights_list, zero.policy = TRUE)
+moran.plot(ols_resid, weights_list, zero.policy = TRUE)
+
+# test Lagrange
+lm.RStests(ols_model, listw=weights_list, test="all")
+testy_ex_ante <- lm.RStests(ols_model, listw=weights_list, test=c("LMerr","RLMerr","LMlag","RLMlag","SARMA"))
+summary(testy_ex_ante)
+
+```
+### Modele przestrzenne
+
+```{r setup Macierz, include=FALSE}
+# Wczytanie pliku z GeoDa
+gwt_file <- "danemapy/EU27OfficialWE5.gwt"
+nb_ek <- read.gwt2nb(gwt_file)
+
+# Tworzenie listy wag 
+lw_ek <- nb2listw(nb_ek, style = "W", zero.policy = TRUE)
+
+eu27_merged <- eu27_merged[!duplicated(eu27_merged[, c("ID", "rok")]), ]
+panel <- pdata.frame(eu27_merged, index = c("ID", "rok"))
+
+# Usuń duplikaty (jeśli jeszcze nie)
+eu27_merged <- eu27_merged[!duplicated(eu27_merged[, c("ID", "rok")]), ]
+
+# Tworzenie panelu
+panel <- pdata.frame(eu27_merged, index = c("ID", "rok"))
+```
+
+## Model SAR
+W oszacowanym przestrzennym modelu panelowym typu SAR (Spatial Autoregressive Model) zbadano determinanty parytetu siły nabywczej (PPP). Współczynnik autoregresji przestrzennej (λ = –0,1125) okazał się statystycznie nieistotny (p = 0,257), co sugeruje brak istotnej zależności przestrzennej pomiędzy poziomami PPP w sąsiadujących krajach Unii Europejskiej. Spośród zmiennych objaśniających istotny wpływ na poziom PPP wykazują ceny energii elektrycznej (p = 0,0037), logarytm PKB (p < 0,001) oraz średnie zarobki (p < 0,001). Wszystkie te zależności mają dodatni charakter, co oznacza, że wyższy poziom rozwoju gospodarczego, wyższe dochody oraz wyższe ceny energii – typowe dla bardziej zaawansowanych gospodarek – sprzyjają wyższej sile nabywczej. Pozostałe zmienne, takie jak jednostkowy koszt pracy, gęstość zaludnienia, ślad zużycia oraz długość członkostwa w Unii Europejskiej, nie okazały się istotne statystycznie, co może oznaczać, że ich wpływ na PPP jest pośredni lub zdominowany przez inne czynniki ujęte w modelu. Wartość kryterium informacyjnego Akaike’a (AIC = 1683,004) wskazuje na relatywnie dobrą jakość dopasowania modelu, szczególnie w porównaniu z klasycznym modelem OLS, dla którego AIC wynosiło 2476,281.
+
+
+```{r setup sar, include=TRUE}
+# Oszacuj modele panelowe przestrzenne z macierzą euklidesową (SAR)
+sar_model <- spml(
+  PPP ~ Electricity.prices + log(GDP) + Jednostkowy.koszt.pracy + 
+        Średnie.zarobki + Gęstość.zaludnienia + Ślad.zużycia + 
+        Czas.w.unii.europejskiej,
+  data = panel,
+  listw = lw_ek,
+  model = "within",
+  effect = "individual",
+  lag = TRUE,
+  spatial.error = "none"
+)
+
+# log-likelihood z obiektu modelu
+logL_SAR <- sar_model$logLik
+
+# liczba parametrów – wszystkie współczynniki + rho (jeśli spatial lag)
+k_SAR <- length(coef(sar_model)) + ifelse(!is.null(sar_model$rho), 1, 0)
+
+# ręcznie obliczone AIC
+AIC_SAR <- -2 * logL_SAR + 2 * k_SAR
+AIC_SAR
+
+summary(sar_model)
+```
+## Model SEM
+Model SEM (Spatial Error Model) z efektami stałymi dla jednostek przestrzennych został oszacowany w celu uwzględnienia potencjalnej autokorelacji przestrzennej w składniku losowym. Współczynnik błędu przestrzennego (rho = –0,056) okazał się nieistotny statystycznie (p = 0,583), co sugeruje brak przestrzennej autokorelacji reszt, a tym samym ograniczoną zasadność zastosowania modelu błędu przestrzennego w analizowanym przypadku. Spośród zmiennych objaśniających istotny pozytywny wpływ na poziom parytetu siły nabywczej (PPP) wykazują ceny energii elektrycznej (p = 0,0044) oraz logarytm PKB (p < 0,001), natomiast średnie zarobki są istotne statystycznie, ale ich wpływ ma charakter negatywny (p < 0,001). Oznacza to, że wyższe ceny energii oraz większy rozmiar gospodarki sprzyjają wyższej sile nabywczej, natomiast wzrost przeciętnych zarobków – po uwzględnieniu innych czynników – może wiązać się z jej spadkiem, co może wskazywać na pośredni wpływ kosztów utrzymania. Pozostałe zmienne, takie jak jednostkowy koszt pracy, gęstość zaludnienia, ślad zużycia oraz czas członkostwa w UE, nie wykazały istotności statystycznej. Wartość kryterium informacyjnego Akaike’a (AIC = 2637,475) wskazuje na słabsze dopasowanie tego modelu w porównaniu do modelu SAR (AIC = 1683,004), co przemawia na korzyść wykorzystania modelu z opóźnieniem przestrzennym zmiennej zależnej w analizie danych.
+
+
+```{r setup sem, include=TRUE}
+# SEM – przestrzenne zależności w błędach
+sem_model <- spml((PPP) ~ Electricity.prices + log(GDP) + Jednostkowy.koszt.pracy + Średnie.zarobki + Gęstość.zaludnienia + Ślad.zużycia + Czas.w.unii.europejskiej,
+                     data = panel, listw = lw_ek,
+                     model = "within", effect = "individual",
+                     lag = FALSE, spatial.error = "b")
+
+# log-likelihood z obiektu modelu
+logL_SEM <- sem_model$logLik
+
+# liczba parametrów – wszystkie współczynniki + rho (jeśli spatial lag)
+k_SEM <- length(coef(sem_model)) + ifelse(!is.null(sem_model$rho), 1, 0)
+
+# ręcznie obliczone AIC
+AIC_SEM <- -2 * logL_SEM + 2 * k_SEM
+AIC_SEM
+
+summary(sem_model)
+
+```
+## Model SAC
+Niniejsza interpretacja odnosi się do estymacji panelowego modelu przestrzennego SAC z efektem stałym, analizującego determinanty parytetu siły nabywczej (PPP). Zarówno parametr błędu przestrzennego ρ (0.577116), jak i współczynnik autoregresji przestrzennej λ (-0.80488) okazały się statystycznie wysoce istotne, co jednoznacznie potwierdza obecność silnych i złożonych zależności przestrzennych w danych. Ich istotność wskazuje na konieczność uwzględniania interakcji przestrzennych w analizie PPP, gdyż pominięcie ich mogłoby prowadzić do obciążonych estymacji i błędnych wniosków. Wśród zmiennych objaśniających, ceny energii elektrycznej (18.08457210, p < 0.01) i logarytm PKB (17.71159618)  wykazują istotny i pozytywny wpływ na PPP. Średnie zarobki (-0.00011449, p < 0.01) są statystycznie istotne, lecz ich wpływ jest marginalnie negatywny. Pozostałe zmienne, takie jak jednostkowy koszt pracy, gęstość zaludnienia, ślad zużycia oraz czas w Unii Europejskiej, nie osiągnęły progu istotności statystycznej. Sugeruje to brak ich bezpośredniego, znaczącego wpływu na PPP w ramach przyjętej specyfikacji modelu SAC, co może wskazywać na ich pośrednią rolę lub dominację innych czynników ujętych w modelu.
+
+```{r setup sac, include=TRUE}
+# SAC – pełny model: SAR + SEM
+sac_model <- spml((PPP) ~ Electricity.prices + log(GDP) + Jednostkowy.koszt.pracy + Średnie.zarobki + Gęstość.zaludnienia + Ślad.zużycia + Czas.w.unii.europejskiej,
+                     data = panel, listw = lw_ek,
+                     model = "within", effect = "individual",
+                     lag = TRUE, spatial.error = "b") 
+summary(sac_model)
+
+# log-likelihood z obiektu modelu
+logL_SAC <- sac_model$logLik
+
+# liczba parametrów – wszystkie współczynniki + rho (jeśli spatial lag)
+k_SAC <- length(coef(sac_model)) + ifelse(!is.null(sac_model$rho), 1, 0)
+
+# ręcznie obliczone AIC
+AIC_SAC <- -2 * logL_SAC + 2 * k_SAC
+AIC_SAC
+
+```
+Na podstawie porównania wartości kryterium informacyjnego Akaike (AIC), model SAR (Spatial Autoregressive) jest najbardziej odpowiedni do analizy, charakteryzując się najniższą wartością AIC wynoszącą 1683.004. Wskazuje to na jego lepsze dopasowanie w stosunku do modeli OLS (2476.281) i SEM (2637.475). W związku z tym, model SAR został wybrany do dalszej analizy i estymacji. 
+
+```{r setup Podsumowanie modele SAR, SEM, SAC, include=TRUE}
+# Podsumowanie modele SAR, SEM, SAC
+# Funkcja wyciągająca kluczowe wyniki
+extract_results <- function(model, model_name) {
+  s <- summary(model)
+  data.frame(
+    Model = model_name,
+    Zmienna = rownames(s$CoefTable),
+    s$CoefTable,
+    row.names = NULL
+  )
+}
+
+# Tworzenie ramki danych
+results <- rbind(
+  extract_results(sar_model, "SAR"),
+  extract_results(sem_model, "SEM"),
+  extract_results(sac_model, "SAC")
+)
+
+# Wyświetlenie tabeli
+print(results, digits = 3)
+```
+
+# Modele mieszane panelowe (modele kombinowane)
+Niniejsza analiza porównuje estymacje współczynników i ich istotność statystyczną w modelach przestrzennych SAR i SEM, uwzględniając efekty stałe (FE) i losowe (RE), dla zmiennych takich jak ceny energii elektrycznej, PKB, koszt pracy, średnie zarobki, gęstość zaludnienia, ślad zużycia i czas w UE, wraz z parametrami przestrzennymi λ i ρ. 
+
+Kluczowe obserwacje wskazują na statystyczną istotność parametrów przestrzennych λ i ρ w modelach SAR-FE i SEM-FE, co podkreśla znaczenie zależności przestrzennych. Ceny energii elektrycznej i logarytm PKB wykazują istotny i pozytywny wpływ na zmienną zależną we wszystkich modelach. Jednostkowy koszt pracy, średnie zarobki, gęstość zaludnienia i ślad zużycia w większości przypadków nie są statystycznie istotne, choć w przypadku średnich zarobków, zerowe estymaty wymagają ostrożności. Czas w Unii Europejskiej jest istotny tylko w modelu SEM-RE. 
+
+Podsumowując, analiza potwierdza istnienie silnych zależności przestrzennych oraz znaczący wpływ cen energii elektrycznej i PKB na zmienną zależną, natomiast wpływ pozostałych zmiennych jest ograniczony lub zależny od specyfikacji modelu, co wymaga dalszych testów i analizy teoretycznej dla optymalnego wyboru modelu. 
+
+```{r setup modele kombinowane, include=TRUE}
+# a) SAR-FE
+sar_fe <- spml(
+  PPP ~ Electricity.prices + log(GDP) + Jednostkowy.koszt.pracy + 
+    Średnie.zarobki + Gęstość.zaludnienia + Ślad.zużycia + Czas.w.unii.europejskiej,
+  data = panel,
+  listw = lw_ek,
+  model = "within",
+  effect = "individual",
+  lag = TRUE
+)
+summary(sar_fe)
+
+# b) SAR-RE
+sar_re <- spml(
+  PPP ~ Electricity.prices + log(GDP) + Jednostkowy.koszt.pracy + 
+    Średnie.zarobki + Gęstość.zaludnienia + Ślad.zużycia + Czas.w.unii.europejskiej,
+  data = panel,
+  listw = lw_ek,
+  model = "random",
+  effect = "individual",
+  lag = TRUE
+)
+summary(sar_re)
+
+# c) SEM-FE
+sem_fe <- spml(
+  PPP ~ Electricity.prices + log(GDP) + Jednostkowy.koszt.pracy + 
+    Średnie.zarobki + Gęstość.zaludnienia + Ślad.zużycia + Czas.w.unii.europejskiej,
+  data = panel,
+  listw = lw_ek,
+  model = "within",
+  effect = "individual",
+  spatial.error = "b"
+)
+summary(sem_fe)
+
+# d) SEM-RE
+sem_re <- spml(
+  PPP ~ Electricity.prices + log(GDP) + Jednostkowy.koszt.pracy + 
+    Średnie.zarobki + Gęstość.zaludnienia + Ślad.zużycia + Czas.w.unii.europejskiej,
+  data = panel,
+  listw = lw_ek,
+  model = "random",
+  effect = "individual",
+  spatial.error = "b"
+)
+summary(sem_re)
+
+
+
+# Funkcja do ekstrakcji współczynników z modelu spml
+get_coef_table <- function(model, model_name) {
+  coefs <- summary(model)$CoefTable
+  data.frame(
+    Zmienna = rownames(coefs),
+    Współczynnik = round(coefs[, 1], 3),
+    SE = round(coefs[, 2], 3),
+    P_wartość = round(coefs[, 4], 3),
+    Model = model_name
+  )
+}
+
+# Tworzymy podsumowanie dla wszystkich modeli
+tabela <- bind_rows(
+  get_coef_table(sar_fe, "SAR-FE"),
+  get_coef_table(sar_re, "SAR-RE"),
+  get_coef_table(sem_fe, "SEM-FE"),
+  get_coef_table(sem_re, "SEM-RE")
+)
+
+# Zamieniamy na szeroką tabelę
+tabela_wide <- tabela %>%
+  unite("Estymata (SE)", Współczynnik, SE, sep = " (") %>%
+  mutate(`Estymata (SE)` = paste0(`Estymata (SE)`, ")")) %>%
+  select(Zmienna, Model, `Estymata (SE)`, P_wartość) %>%
+  pivot_wider(names_from = Model, values_from = c(`Estymata (SE)`, P_wartość))
+
+# Wyświetlenie tabeli
+knitr::kable(tabela_wide, caption = "Porównanie współczynników i istotności w modelach SAR i SEM")
+```
+
+# Spatial Durbin Model (SDM)
+
+```{r setup sdm, include=TRUE}
+# Model SDM FE
+sdm_FE <- spml(
+  PPP ~ Electricity.prices + log(GDP) + Jednostkowy.koszt.pracy + 
+    Średnie.zarobki + Gęstość.zaludnienia + Ślad.zużycia + Czas.w.unii.europejskiej,
+  data = panel,
+  listw = lw_ek,
+  model = "within",
+  effect = "individual",
+  lag = TRUE,
+  Durbin = TRUE
+)
+summary(sdm_FE)
+```
+```{r }
+# Model SDM RE
+sdm_RE <- spml(PPP ~ Electricity.prices + log(GDP) + Jednostkowy.koszt.pracy + 
+    Średnie.zarobki + Gęstość.zaludnienia + Ślad.zużycia + Czas.w.unii.europejskiej, data = panel, listw = lw_ek, model = "random", effect = "individual", lag = TRUE, Durbin = TRUE)
+summary(sdm_RE)
+```
+# 4. Test Hausmana
+W celu wyboru odpowiedniego efektu (stałego vs losowego) dla przestrzennych modeli panelowych zastosowano test Hausmana. Wyniki dla modeli przestrzennych wskazują na istotne statystyki chi-kwadrat (chi² = 178.54 i 25.44, przy df = 7) oraz bardzo niskie wartości p (p < 0.001), co oznacza, że istnieją silne podstawy do odrzucenia hipotezy zerowej o zgodności estymatorów. W związku z tym należy uznać, że modele z efektami losowymi są niespójne, a bardziej odpowiednie będą modele z efektami stałymi, zapewniające zgodne i efektywne estymatory parametrów.
+
+```{r setup Wybór najleszpego modelu , include=TRUE}
+# Test Hausmana: SAR-FE vs SAR-RE
+hausman_sar <- sphtest(sar_fe, sar_re)
+print(hausman_sar)
+
+# Test Hausmana: SEM-FE vs SEM-RE
+hausman_sem <- sphtest(sem_fe, sem_re)
+print(hausman_sem)
+
+# Test Hausmana: SDM-FE vs SDM-RE
+hausman_sdm <- sphtest(sdm_FE, sdm_RE)
+print(hausman_sdm)
+```
+# 5. Wybór najlepszego modelu
+Wstępna selekcja modelu, oparta na kryterium informacyjnym Akaike (AIC), wskazała na model SAR (Spatial Autoregressive) jako najlepiej dopasowany (AIC = 1683.004) spośród rozważanych modeli SAR, SEM i OLS. 
+
+Następnie, w celu określenia najodpowiedniejszego efektu (stałego vs. losowego) dla przestrzennych modeli panelowych (SAR, SEM, SDM), przeprowadzono test Hausmana. Wyniki testu (p < 0.001 dla wszystkich trzech przypadków SAR, SEM oraz SDM) wykazały istotną statystycznie różnicę, co skutkuje odrzuceniem hipotezy zerowej o zgodności modeli z efektami losowymi. Oznacza to, że w każdym z analizowanych przypadków najbardziej odpowiednim modelem jest ten z efektami stałymi (FE). 
+
+W konsekwencji, łącząc wyniki analizy AIC oraz testu Hausmana, najlepszym i ostatecznie wybranym modelem do dalszych analiz jest SAR z efektami stałymi (SAR FE). Model ten efektywnie uwzględnia zarówno zależność przestrzenną (autoregresja przestrzenna), jak i niezobserwowaną heterogeniczność jednostek.
+
+```{r}
+# Wybrany model SAR-FE
+summary(sar_fe)
+
+```
+
+Analiza wybranego modelu SAR FE ujawnia istotne zależności przestrzenne. Estymowany współczynnik błędu przestrzennego (ρ) wynosi 0.577 i jest wysoce statystycznie istotny (p < 0.001). Oznacza to, że niewyjaśnione czynniki (szoki) wpływające na jedną jednostkę mają pozytywny i istotny wpływ również na sąsiednie jednostki. Innymi słowy, pozytywny szok w jednej jednostce będzie prowadził do pozytywnych szoków w jednostkach sąsiadujących, nawet po uwzględnieniu zmiennych objaśniających. Natomiast estymowany współczynnik autoregresji przestrzennej (λ) wynosi -0.805 i jest również wysoce statystycznie istotny (p < 0.001). Ujemna wartość tego współczynnika wskazuje, że wysoka wartość zmiennej zależnej w sąsiedniej jednostce wiąże się z niższą wartością tej zmiennej w danej jednostce.  
+
+Wśród zmiennych objaśniających, ceny energii elektrycznej (estymata = 18.08, p < 0.001) oraz logarytm Produktu Krajowego Brutto (PKB) (estymata = 17.71, p < 0.001) wykazują silny, dodatni i statystycznie istotny wpływ na zmienną objaśnianą (PPP). Oznacza to, że wzrost cen energii elektrycznej oraz wzrost PKB przekładają się na istotny wzrost PPP. Ponadto, średnie zarobki mają statystycznie istotny, aczkolwiek niewielki i ujemny wpływ (estymata = -0.0001, p < 0.01) na PPP. Zmienne takie jak jednostkowy koszt pracy, gęstość zaludnienia, ślad zużycia oraz czas w Unii Europejskiej, okazały się statystycznie nieistotne na przyjętym poziomie istotności, co sugeruje brak ich bezpośredniego, znaczącego wpływu na zmienną zależną w ramach specyfikacji tego modelu. 
+
+```{r Obliczenie efektów, echo=FALSE}
+# Konwersja listy wag do formatu sparse matrix
+W <- as(as_dgRMatrix_listw(lw_ek), "CsparseMatrix")
+
+# Obliczenie efektów
+eff_sar <- impacts(sar_fe, listw = lw_ek, time = length(unique(panel$rok)))
+summary(eff_sar, zstats = TRUE)
+
+# Wizualizacja efektów
+plot(eff_sar)
+```
+
+Wyniki analizy wskazują, że ceny energii elektrycznej oraz logarytm PKB (log(GDP)) mają największy całkowity pozytywny wpływ na Parytet Siły Nabywczej (PPP), odpowiednio z wartościami około 10,00 i 9,80. Dla obu zmiennych, wpływ bezpośredni na PPP jest znacząco pozytywny (około 19,10 dla cen energii elektrycznej i 18,70 dla log(GDP)). Sugeruje to, że wzrost cen energii lub PKB w danym kraju bezpośrednio prowadzi do zwiększenia jego ogólnego poziomu cen i tym samym może wpłynąć na siłę nabywczą. Jednocześnie, wpływ pośredni jest negatywny (odpowiednio około -9,09 i -8,91). Może to oznaczać, że choć wzrost cen energii lub PKB w jednym kraju zwiększa jego własne PPP, to w krajach sąsiednich może to prowadzić do niewielkiego spadku PPP, być może poprzez mechanizmy konkurencji gospodarczej lub przepływu dóbr i usług. 
+
+Jednostkowy koszt pracy i gęstość zaludnienia wykazują niewielkie pozytywne wpływy całkowite na PPP. Dla jednostkowego kosztu pracy, efekt bezpośredni (0,0465) jest pozytywny, a efekt pośredni (-0,0221) negatywny, co daje niewielki pozytywny wpływ całkowity w wysokości 0,0244. Podobnie, gęstość zaludnienia ma bezpośredni pozytywny wpływ (0,0088) i pośredni negatywny wpływ (-0,0042), prowadząc do niewielkiego pozytywnego wpływu całkowitego w wysokości 0,0046. Oznacza to, że choć te czynniki lokalnie wspierają poziom cen i siłę nabywczą, to ich wpływ na sąsiadów jest odwrotny. 
+
+Ślad zużycia również wykazuje zauważalny pozytywny wpływ całkowity wynoszący 0,4927 na PPP, wynikający z pozytywnego efektu bezpośredniego (0,9405) i negatywnego efektu pośredniego (-0.4478). 
+
+Z kolei średnie zarobki i czas w Unii Europejskiej wykazują negatywne wpływy całkowite na PPP. Średnie zarobki mają niewielki negatywny wpływ całkowity wynoszący -0,000063, z negatywnym efektem bezpośrednim (-0,000121) i pozytywnym efektem pośrednim (0,000058). Czas w Unii Europejskiej wykazuje całkowity negatywny wpływ wynoszący -0,0147, wynikający z negatywnego efektu bezpośredniego (-0,0281) i pozytywnego efektu pośredniego (0,0134). Może to sugerować, że dłuższe członkostwo w UE wiąże się z nieco niższym poziomem cen (lub wyższą realną siłą nabywczą), prawdopodobnie z powodu integracji rynkowej i swobodnego przepływu towarów, co może wyrównywać ceny w regionie. 
+
+Dekompozycja efektów w modelu SAR dostarcza głębszego wglądu w przestrzenne mechanizmy leżące u podstaw Parytetu Siły Nabywczej (PPP). Ujawnia nie tylko lokalne oddziaływanie zmiennych objaśniających, ale także istnienie efektów regionalnych, co potwierdza zasadność zastosowania metod ekonometrii przestrzennej w analizie tego typu zjawisk. Zmienne znaki i wielkości bezpośrednich i pośrednich wpływów podkreślają złożone wzajemne oddziaływania czynników wpływających na PPP w połączonych ze sobą regionach. 
+
+# 6. Podsumowanie
+Niniejszy projekt przedstawia analizę czynników kształtujących parytet siły nabywczej (PPP) w krajach Unii Europejskiej w latach 2013-2024, wykorzystując metody ekonometrii przestrzennej. Głównym celem było zidentyfikowanie kluczowych determinantów ekonomicznych wpływających na realny poziom życia i siłę nabywczą walut.
+
+Kluczowym ustaleniem wstępnej fazy badań było stwierdzenie silnej zależności przestrzennej – poziom PPP w danym kraju jest istotnie powiązany z poziomem PPP w krajach sąsiednich. Analiza wykazała istnienie wyraźnych geograficznych klastrów: z jednej strony grupy państw o wysokiej sile nabywczej w Europie Zachodniej i Północnej, a z drugiej – zgrupowania krajów o niższym PPP w Europie Środkowo-Wschodniej. Odkrycie to potwierdziło, że standardowe modele ekonometryczne byłyby niewystarczające, co uzasadniło zastosowanie specjalistycznych technik przestrzennych.
+
+W ramach analizy porównano kilka modeli, w tym klasyczny model regresji oraz modele przestrzenne. Stwierdzono, że standardowy model, pomijający interakcje przestrzenne, prowadził do błędnych wniosków. Na podstawie rygorystycznych kryteriów statystycznych, model z przestrzennym opóźnieniem i efektami stałymi (SAR-FE) został wybrany jako najlepiej dopasowany do danych.
+
+Finalne wyniki wskazują, że głównymi czynnikami pozytywnie wpływającymi na siłę nabywczą w Unii Europejskiej są wyższy produkt krajowy brutto (PKB), wyższe średnie zarobki oraz wyższe ceny energii elektrycznej, które często korelują z poziomem rozwoju gospodarczego. Co ciekawe, po uwzględnieniu tych kluczowych determinant i efektów przestrzennych, inne czynniki, takie jak długość członkostwa w UE czy gęstość zaludnienia, nie wykazały bezpośredniego, istotnego wpływu na PPP w ramach przyjętego modelu.
+
+# 7. Bibliografia
+Balassa, B. (1964). The Purchasing-Power Parity Doctrine: A Reappraisal. Journal of Political Economy
+Samuelson, P. A. (1964). Theoretical Notes on Trade Problems. Review of Economics and Statistics
+Taylor, A. M., & Taylor, M. P. (2004). The Purchasing Power Parity Debate. Journal of Economic Perspectives
+Gelb, A. & Diofasi, A. (2016). What Determines Purchasing-PowerParity Exchange Rates? 
+Sarno, L. & Taylor, M. P. (2002). Purchasing Power Parity and the Real Exchange Rate.
+Brueckner, J. K. (2000). Urban sprawl: Diagnosis and remedies. International Regional Science Review.
